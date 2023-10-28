@@ -159,7 +159,7 @@ export class getJsonFile {
 
 Usage: 
 
-```
+```ts
 
  // Usage
 const json = new getJsonFile('data.json')
