@@ -154,6 +154,17 @@ export class getJsonFile {
         return this.data;
     }
 }
+/*
+const json = new getJsonFile('data.json')
+    .setPath('./data2.json')
+    .deleteFromArray(item => item.key === 'value1')
+    .appendToArray({ key: 'value2' })
+    .removeDuplicates()
+    .filterKeys(['key']);
+
+const latestData = json.getData();
+console.log('Latest Data:', latestData);
+*/
 ```
 ---
 
@@ -161,7 +172,6 @@ Usage:
 
 ```ts
 
- // Usage
 const json = new getJsonFile('data.json')
     .setPath('./data2.json')
     .deleteFromArray(item => item.key === 'value1')
