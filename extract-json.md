@@ -39,3 +39,46 @@ The provided bash script performs the following tasks:
    - This command removes the temporary files `extracted.json` and `comma_separated.json` that were created during the process.
 
 ---
+
+To skip malformed elements: 
+
+```bash
+
+# Extract JSON objects from the markdown file
+sed -n '/^{/,/^}/p' agent-tasks-v6.md > extracted.json
+
+# Initialize an empty file for valid JSON objects
+echo -n "[]" > valid_objects.json
+
+# Validate and concatenate JSON objects
+while IFS= read -r line; do
+    # Check if the line marks the beginning or end of an object
+    if [[ "$line" =~ ^\{ ]] || [[ "$line" =~ ^\} ]]; then
+        # For the starting line of an object, initialize a new object string
+        if [[ "$line" =~ ^\{ ]]; then
+            object="$line"
+        else
+            # For the closing line, complete the object and validate it
+            object+="$line"
+            echo "$object" | jq . > /dev/null 2>&1
+            # If the object is valid, append it to the valid_objects.json array
+            if [ $? -eq 0 ]; then
+                valid_objects=$(jq --argjson obj "$object" '. + [$obj]' valid_objects.json)
+                echo "$valid_objects" > valid_objects.json
+            fi
+            object=""
+        fi
+    else
+        # If the line is inside an object, append it to the object string
+        if [ -n "$object" ]; then
+            object+="$line"
+        fi
+    fi
+done < extracted.json
+
+# Rename the file with valid JSON objects
+mv valid_objects.json tasks2-v55.json
+
+# Clean up temporary files
+rm extracted.json
+```
