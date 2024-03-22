@@ -55,6 +55,41 @@ def extract_tag(text: str, tag: str) -> str:
     return match.group(1).strip() if match else ''
 
 
+shareGPT_into_chatml = lambda chatmls: [{"role": message["from"], "content": message["value"]} for message in chatmls]
+
+chatml_into_shareGPT = lambda shareGPTs: [{"from": message["role"], "value": message["content"]} for message in shareGPTs]
+
+group_into_dicts = lambda conversations: [{"messages": conversation} for conversation in conversations]
+
+
+def text_to_chat_dynamic(dialogues_str):
+    # Identifies two unique roles, adjusts parsing
+    pattern = re.compile(r'\b([A-Za-z0-9_]+): ')
+    matches = pattern.finditer(dialogues_str)
+    roles = set()
+    for match in matches:
+        role = match.group(1).lower()
+        roles.add(role)
+        if len(roles) == 2:
+            break
+    if len(roles) != 2:
+        raise ValueError("Exactly two unique roles must be present in the dialogue.")
+    # Create a pattern to match only the identified roles
+    role_pattern = re.compile(fr'\b({"|".join(roles)}): ', re.IGNORECASE)
+    matches = role_pattern.finditer(dialogues_str)
+    roles_positions = [(match.start(), match.end(), match.group(1)) for match in matches]
+    formatted_dialogues = []
+    next_start = None
+    for i in range(len(roles_positions)-1, -1, -1):
+        start, end, role = roles_positions[i]
+        if next_start is None:
+            content = dialogues_str[end:].strip()
+        else:
+            content = dialogues_str[end:next_start].strip()
+        content = re.sub(r'\n\s+', '\n', content)
+        formatted_dialogues.insert(0, {'role': role.lower(), 'content': content})
+        next_start = start
+    return formatted_dialogues
 
 
 
