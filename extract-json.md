@@ -44,41 +44,42 @@ To skip malformed elements:
 
 ```bash
 
-# Extract JSON objects from the markdown file
-sed -n '/^{/,/^}/p' agent-tasks-v6.md > extracted.json
+# Extract JSON blocks from a Markdown document
+sed -n '/^{/,/^}/p' agent-tasks-v6.md > extracted_json_blocks.json
 
-# Initialize an empty file for valid JSON objects
-echo -n "[]" > valid_objects.json
+# Prepare an empty JSON array to store valid JSON objects
+echo "[]" > valid_json_objects.json
 
-# Validate and concatenate JSON objects
-while IFS= read -r line; do
-    # Check if the line marks the beginning or end of an object
-    if [[ "$line" =~ ^\{ ]] || [[ "$line" =~ ^\} ]]; then
-        # For the starting line of an object, initialize a new object string
-        if [[ "$line" =~ ^\{ ]]; then
-            object="$line"
+# Read each line from the extracted JSON blocks and validate them
+while IFS= read -r current_line; do
+    # Detect the start or end of a JSON object
+    if [[ "$current_line" =~ ^\{ ]] || [[ "$current_line" =~ ^\} ]]; then
+        # Handle the start of a JSON object
+        if [[ "$current_line" =~ ^\{ ]]; then
+            json_object="$current_line"
         else
-            # For the closing line, complete the object and validate it
-            object+="$line"
-            echo "$object" | jq . > /dev/null 2>&1
-            # If the object is valid, append it to the valid_objects.json array
-            if [ $? -eq 0 ]; then
-                valid_objects=$(jq --argjson obj "$object" '. + [$obj]' valid_objects.json)
-                echo "$valid_objects" > valid_objects.json
+            # Complete the JSON object at the end marker and validate it
+            json_object+="$current_line"
+            if echo "$json_object" | jq . > /dev/null 2>&1; then
+                # Append valid JSON object to the array in the valid_json_objects.json file
+                updated_json_array=$(jq --argjson obj "$json_object" '. + [$obj]' valid_json_objects.json)
+                echo "$updated_json_array" > valid_json_objects.json
             fi
-            object=""
+            # Reset json_object for the next block
+            json_object=""
         fi
     else
-        # If the line is inside an object, append it to the object string
-        if [ -n "$object" ]; then
-            object+="$line"
+        # Build the JSON object by appending lines inside the object markers
+        if [ -n "$json_object" ]; then
+            json_object+="$current_line"
         fi
     fi
-done < extracted.json
+done < extracted_json_blocks.json
 
-# Rename the file with valid JSON objects
-mv valid_objects.json tasks2-v55.json
+# Finalize the name of the file containing valid JSON objects
+mv valid_json_objects.json finalized_valid_tasks.json
 
-# Clean up temporary files
-rm extracted.json
+# Remove temporary file
+rm extracted_json_blocks.json
+
 ```
