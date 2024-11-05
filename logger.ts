@@ -1,8 +1,11 @@
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
+import util from 'util';
+
 
 export class LoggerService {
   private logger: winston.Logger;
+  private originalConsoleLog: (...data: any[]) => void;
   public colors = {
     debug: '\x1b[36m', // 🔷 Cyan
     info: '\x1b[34m',  // 🔵 Blue
@@ -12,20 +15,28 @@ export class LoggerService {
     orange: '\x1b[38;5;208m',
     magenta: '\x1b[3m\x1b[35m',
     lightBlueItalic: '\x1b[3m\x1b[94m',
-    lightItalicRed: '\x1b[3m\x1b[91m',    // New light italic red
-    lightItalicOrange: '\x1b[3m\x1b[38;5;215m', // New light italic orange
-    lightItalicGreen: '\x1b[3m\x1b[92m',  // New light italic green
+    lightItalicRed: '\x1b[3m\x1b[91m',
+    lightItalicOrange: '\x1b[3m\x1b[38;5;215m',
+    lightItalicGreen: '\x1b[3m\x1b[92m',
   };
-
 
   constructor() {
     const env = process.env.NODE_ENV || 'development';
     const logLevel = env === 'production' ? 'info' : 'debug';
 
+    this.originalConsoleLog = console.log;
     this.logger = winston.createLogger({
       level: logLevel,
       transports: [this.consoleTransport(), this.fileTransport()],
     });
+
+    // Optionally, avoid overriding global console methods
+    // If you choose to override, ensure proper handling as shown below
+    console.log = this.info.bind(this);
+    console.info = this.info.bind(this);
+    console.warn = this.warn.bind(this);
+    console.error = this.error.bind(this);
+    console.debug = this.debug.bind(this);
   }
 
   private consoleTransport(): winston.transport {
@@ -52,16 +63,23 @@ export class LoggerService {
   }
 
 
+  private formatTimestamp(timestamp: string): string {
+    const date = new Date(timestamp);
+    return date.toISOString().replace('T', ' ').slice(0, 19);
+  }
 
   private formatConsoleMsg({ level, message, timestamp, stack }: winston.Logform.TransformableInfo): string {
-    const icon = this.getLogIcon(level);
-    const colorLevel = this.colorize(level);
-    return `${timestamp} ${icon} ${colorLevel}: ${message}${stack ? '\n' + stack : ''}`;
-  }
+  const icon = this.getLogIcon(level);
+  const colorLevel = this.colorize(level);
+  const formattedTimestamp = this.formatTimestamp(timestamp);
+  return `${formattedTimestamp} ${icon} ${colorLevel}: ${message}${stack ? '\n' + stack : ''}`;
+}
 
-  private formatFileMsg({ level, message, timestamp, stack }: winston.Logform.TransformableInfo): string {
-    return `${timestamp} ${level.toUpperCase()}: ${message}${stack ? '\n' + stack : ''}`;
-  }
+private formatFileMsg({ level, message, timestamp, stack }: winston.Logform.TransformableInfo): string {
+  const formattedTimestamp = this.formatTimestamp(timestamp);
+  return `${formattedTimestamp} ${level.toUpperCase()}: ${message}${stack ? '\n' + stack : ''}`;
+}
+
 
   private colorize(level: string): string {
     return `${this.colors[level] || ''}${level.toUpperCase()}${this.colors.reset}`;
@@ -104,75 +122,51 @@ export class LoggerService {
     return { func: 'Unknown', file: 'Unknown', line: 'Unknown' };
   }
 
-  debug(message: string): void {
-    const { func, file, line } = this.captureTrace();
-    this.logger.debug(`${message} [Func: ${func}, 📂 ${this.colors.reset}${this.colors.lightItalicGreen}${file}:${line}${this.colors.reset}]`);
-  }
-
-  info(message: string): void {
-    const { func, file, line } = this.captureTrace();
-    this.logger.info(`${message} [Func: ${func}, 📂 ${this.colors.reset}${this.colors.lightBlueItalic}${file}:${line}${this.colors.reset}]`);
-  }
-
-  warn(message: string): void {
-    const { func, file, line } = this.captureTrace();
-    this.logger.warn(`${message} [Func: ${func}, 📂 ${this.colors.reset}${this.colors.lightItalicOrange}${file}:${line}${this.colors.reset}]`);
-  }
-
-  error(message: string, error?: Error): void {
-    const { func, file, line } = this.captureTrace();
-    this.logger.error(`${message} [Func: ${func}, 📂 ${this.colors.reset}${this.colors.lightItalicRed}${file}:${line}${this.colors.reset}]`, { error });
-  }
-}
-
-
-
-
-class LoggerServiceTester {
-  private logger: LoggerService;
-
-  constructor() {
-    this.logger = new LoggerService();
-  }
-
-  testBasicLogs() {
-    console.log('Testing basic log levels:');
-    this.logger.debug('Debug message');
-    this.logger.info('Info message');
-    this.logger.warn('Warning message');
-    this.logger.error('Error message', new Error('Test error'));
-  }
-
-  testNestedFunction() {
-    console.log('\nTesting nested function for stack trace:');
-    const nestedFunction = () => {
-      this.logger.info('Nested function info');
-      this.logger.error('Nested function error');
+  // private formatMessage(message: any, ...args: any[]): string {
+  //   const msgStr = typeof message === 'string' ? message : JSON.stringify(message);
+  //   const argsStr = args.length ? ' ' + args.map(arg => JSON.stringify(arg, null, 2)).join(' ') : '';
+  //   return msgStr + argsStr;
+  // }
+  private formatMessage(message: any, ...args: any[]): string {
+    const formatObject = (obj: any): string => {
+      return util.inspect(obj, { depth: null, colors: true });
     };
-    nestedFunction();
+
+    let formattedMessage = typeof message === 'string' ? message : formatObject(message);
+    
+    if (args.length) {
+      formattedMessage += ' ' + args.map(arg => 
+        typeof arg === 'string' ? arg : formatObject(arg)
+      ).join(' ');
+    }
+
+    return formattedMessage;
   }
 
-  // @see {@link LoggerServiceTester.testAsyncFunction}
-  async testAsyncFunction() {
-    console.log('\nTesting async function:');
-    await this.delayedLog();
+  debug(message: any, ...args: any[]): void {
+    const { func, file, line } = this.captureTrace();
+    const msg = 
+    this.logger.debug(`${this.formatMessage(message, ...args)} [Func: ${func}, 📂 ${this.colors.reset}${this.colors.lightItalicGreen}${file}:${line}${this.colors.reset}]`);
   }
 
-  private async delayedLog(): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    this.logger.info('Async function info');
-    this.logger.error('Async function error');
+  info(message: any, ...args: any[]): void {
+    const { func, file, line } = this.captureTrace();
+    this.logger.info(`${this.formatMessage(message, ...args)} [Func: ${func}, 📂 ${this.colors.reset}${this.colors.lightBlueItalic}${file}:${line}${this.colors.reset}]`);
   }
 
+  warn(message: any, ...args: any[]): void {
+    const { func, file, line } = this.captureTrace();
+    this.logger.warn(`${this.formatMessage(message, ...args)} [Func: ${func}, 📂 ${this.colors.reset}${this.colors.lightItalicOrange}${file}:${line}${this.colors.reset}]`);
+  }
 
-  async runAllTests() {
-    this.testBasicLogs();
-    this.testNestedFunction();
-    await this.testAsyncFunction();
-    console.log('\nTests completed. Check the logs folder for file output.');
+  error(message: any, ...args: any[]): void {
+    const { func, file, line } = this.captureTrace();
+    this.logger.error(`${this.formatMessage(message, ...args)} [Func: ${func}, 📂 ${this.colors.reset}${this.colors.lightItalicRed}${file}:${line}${this.colors.reset}]`);
   }
 }
 
-// Run the tests
-const tester = new LoggerServiceTester();
-tester.runAllTests();
+// Create an instance of LoggerService
+const loggerService = new LoggerService();
+
+// Export the instance if needed
+export default loggerService;
